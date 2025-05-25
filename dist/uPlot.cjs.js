@@ -2062,357 +2062,6 @@ const arcV = (p, y, x, r, startAngle, endAngle) => { p.arc(x, y, r, startAngle, 
 const bezierCurveToH = (p, bp1x, bp1y, bp2x, bp2y, p2x, p2y) => { p.bezierCurveTo(bp1x, bp1y, bp2x, bp2y, p2x, p2y); };
 const bezierCurveToV = (p, bp1y, bp1x, bp2y, bp2x, p2y, p2x) => { p.bezierCurveTo(bp1x, bp1y, bp2x, bp2y, p2x, p2y); };
 
-// TODO: drawWrap(seriesIdx, drawPoints) (save, restore, translate, clip)
-function points(opts) {
-	return (u, seriesIdx, idx0, idx1, filtIdxs) => {
-	//	log("drawPoints()", arguments);
-		let { pxRatio } = u;
-
-		return orient(u, seriesIdx, (series, dataX, dataY, scaleX, scaleY, valToPosX, valToPosY, xOff, yOff, xDim, yDim) => {
-			let { pxRound, points } = series;
-
-			let moveTo, arc;
-
-			if (scaleX.ori == 0) {
-				moveTo = moveToH;
-				arc = arcH;
-			}
-			else {
-				moveTo = moveToV;
-				arc = arcV;
-			}
-
-			const width = roundDec(points.width * pxRatio, 3);
-
-			let rad = (points.size - points.width) / 2 * pxRatio;
-			let dia = roundDec(rad * 2, 3);
-
-			let fill = new Path2D();
-			let clip = new Path2D();
-
-			let { left: lft, top: top, width: wid, height: hgt } = u.bbox;
-
-			rectH(clip,
-				lft - dia,
-				top - dia,
-				wid + dia * 2,
-				hgt + dia * 2,
-			);
-
-			const drawPoint = pi => {
-				if (dataY[pi] != null) {
-					let x = pxRound(valToPosX(dataX[pi], scaleX, xDim, xOff));
-					let y = pxRound(valToPosY(dataY[pi], scaleY, yDim, yOff));
-
-					moveTo(fill, x + rad, y);
-					arc(fill, x, y, rad, 0, PI * 2);
-				}
-			};
-
-			if (filtIdxs)
-				filtIdxs.forEach(drawPoint);
-			else {
-				for (let pi = idx0; pi <= idx1; pi++)
-					drawPoint(pi);
-			}
-
-			return {
-				stroke: width > 0 ? fill : null,
-				fill,
-				clip,
-				flags: BAND_CLIP_FILL | BAND_CLIP_STROKE,
-			};
-		});
-	};
-}
-
-function _drawAcc(lineTo) {
-	return (stroke, accX, minY, maxY, inY, outY) => {
-		if (minY != maxY) {
-			if (inY != minY && outY != minY)
-				lineTo(stroke, accX, minY);
-			if (inY != maxY && outY != maxY)
-				lineTo(stroke, accX, maxY);
-
-			lineTo(stroke, accX, outY);
-		}
-	};
-}
-
-const drawAccH = _drawAcc(lineToH);
-const drawAccV = _drawAcc(lineToV);
-
-function linear(opts) {
-	const alignGaps = ifNull(opts?.alignGaps, 0);
-
-	return (u, seriesIdx, idx0, idx1) => {
-		return orient(u, seriesIdx, (series, dataX, dataY, scaleX, scaleY, valToPosX, valToPosY, xOff, yOff, xDim, yDim) => {
-			[idx0, idx1] = nonNullIdxs(dataY, idx0, idx1);
-
-			let pxRound = series.pxRound;
-
-			let pixelForX = val => pxRound(valToPosX(val, scaleX, xDim, xOff));
-			let pixelForY = val => pxRound(valToPosY(val, scaleY, yDim, yOff));
-
-			let lineTo, drawAcc;
-
-			if (scaleX.ori == 0) {
-				lineTo = lineToH;
-				drawAcc = drawAccH;
-			}
-			else {
-				lineTo = lineToV;
-				drawAcc = drawAccV;
-			}
-
-			const dir = scaleX.dir * (scaleX.ori == 0 ? 1 : -1);
-
-			const _paths = {stroke: new Path2D(), fill: null, clip: null, band: null, gaps: null, flags: BAND_CLIP_FILL};
-			const stroke = _paths.stroke;
-
-			let hasGap = false;
-
-			// decimate when number of points >= 4x available pixels
-			const decimate = idx1 - idx0 >= xDim * 4;
-
-			if (decimate) {
-				let xForPixel = pos => u.posToVal(pos, scaleX.key, true);
-
-				let minY = null,
-					maxY = null,
-					inY, outY, drawnAtX;
-
-				let accX = pixelForX(dataX[dir == 1 ? idx0 : idx1]);
-
-				let idx0px = pixelForX(dataX[idx0]);
-				let idx1px = pixelForX(dataX[idx1]);
-
-				// tracks limit of current x bucket to avoid having to get x pixel for every x value
-				let nextAccXVal = xForPixel(dir == 1 ? idx0px + 1 : idx1px - 1);
-
-				for (let i = dir == 1 ? idx0 : idx1; i >= idx0 && i <= idx1; i += dir) {
-					let xVal = dataX[i];
-					let reuseAccX = dir == 1 ? (xVal < nextAccXVal) : (xVal > nextAccXVal);
-					let x = reuseAccX ? accX :  pixelForX(xVal);
-
-					let yVal = dataY[i];
-
-					if (x == accX) {
-						if (yVal != null) {
-							outY = yVal;
-
-							if (minY == null) {
-								lineTo(stroke, x, pixelForY(outY));
-								inY = minY = maxY = outY;
-							} else {
-								if (outY < minY)
-									minY = outY;
-								else if (outY > maxY)
-									maxY = outY;
-							}
-						}
-						else {
-							if (yVal === null)
-								hasGap = true;
-						}
-					}
-					else {
-						if (minY != null)
-							drawAcc(stroke, accX, pixelForY(minY), pixelForY(maxY), pixelForY(inY), pixelForY(outY));
-
-						if (yVal != null) {
-							outY = yVal;
-							lineTo(stroke, x, pixelForY(outY));
-							minY = maxY = inY = outY;
-						}
-						else {
-							minY = maxY = null;
-
-							if (yVal === null)
-								hasGap = true;
-						}
-
-						accX = x;
-						nextAccXVal = xForPixel(accX + dir);
-					}
-				}
-
-				if (minY != null && minY != maxY && drawnAtX != accX)
-					drawAcc(stroke, accX, pixelForY(minY), pixelForY(maxY), pixelForY(inY), pixelForY(outY));
-			}
-			else {
-				for (let i = dir == 1 ? idx0 : idx1; i >= idx0 && i <= idx1; i += dir) {
-					let yVal = dataY[i];
-
-					if (yVal === null)
-						hasGap = true;
-					else if (yVal != null)
-						lineTo(stroke, pixelForX(dataX[i]), pixelForY(yVal));
-				}
-			}
-
-			let [ bandFillDir, bandClipDir ] = bandFillClipDirs(u, seriesIdx);
-
-			if (series.fill != null || bandFillDir != 0) {
-				let fill = _paths.fill = new Path2D(stroke);
-
-				let fillToVal = series.fillTo(u, seriesIdx, series.min, series.max, bandFillDir);
-				let fillToY = pixelForY(fillToVal);
-
-				let frX = pixelForX(dataX[idx0]);
-				let toX = pixelForX(dataX[idx1]);
-
-				if (dir == -1)
-					[toX, frX] = [frX, toX];
-
-				lineTo(fill, toX, fillToY);
-				lineTo(fill, frX, fillToY);
-			}
-
-			if (!series.spanGaps) { // skip in mode: 2?
-			//	console.time('gaps');
-				let gaps = [];
-
-				hasGap && gaps.push(...findGaps(dataX, dataY, idx0, idx1, dir, pixelForX, alignGaps));
-
-			//	console.timeEnd('gaps');
-
-			//	console.log('gaps', JSON.stringify(gaps));
-
-				_paths.gaps = gaps = series.gaps(u, seriesIdx, idx0, idx1, gaps);
-
-				_paths.clip = clipGaps(gaps, scaleX.ori, xOff, yOff, xDim, yDim);
-			}
-
-			if (bandClipDir != 0) {
-				_paths.band = bandClipDir == 2 ? [
-					clipBandLine(u, seriesIdx, idx0, idx1, stroke, -1),
-					clipBandLine(u, seriesIdx, idx0, idx1, stroke,  1),
-				] : clipBandLine(u, seriesIdx, idx0, idx1, stroke, bandClipDir);
-			}
-
-			return _paths;
-		});
-	};
-}
-
-// BUG: align: -1 behaves like align: 1 when scale.dir: -1
-function stepped(opts) {
-	const align = ifNull(opts.align, 1);
-	// whether to draw ascenders/descenders at null/gap bondaries
-	const ascDesc = ifNull(opts.ascDesc, false);
-	const alignGaps = ifNull(opts.alignGaps, 0);
-	const extend = ifNull(opts.extend, false);
-
-	return (u, seriesIdx, idx0, idx1) => {
-		let { pxRatio } = u;
-
-		return orient(u, seriesIdx, (series, dataX, dataY, scaleX, scaleY, valToPosX, valToPosY, xOff, yOff, xDim, yDim) => {
-			[idx0, idx1] = nonNullIdxs(dataY, idx0, idx1);
-
-			let pxRound = series.pxRound;
-
-			let { left, width } = u.bbox;
-
-			let pixelForX = val => pxRound(valToPosX(val, scaleX, xDim, xOff));
-			let pixelForY = val => pxRound(valToPosY(val, scaleY, yDim, yOff));
-
-			let lineTo = scaleX.ori == 0 ? lineToH : lineToV;
-
-			const _paths = {stroke: new Path2D(), fill: null, clip: null, band: null, gaps: null, flags: BAND_CLIP_FILL};
-			const stroke = _paths.stroke;
-
-			const dir = scaleX.dir * (scaleX.ori == 0 ? 1 : -1);
-
-			let prevYPos  = pixelForY(dataY[dir == 1 ? idx0 : idx1]);
-			let firstXPos = pixelForX(dataX[dir == 1 ? idx0 : idx1]);
-			let prevXPos = firstXPos;
-
-			let firstXPosExt = firstXPos;
-
-			if (extend && align == -1) {
-				firstXPosExt = left;
-				lineTo(stroke, firstXPosExt, prevYPos);
-			}
-
-			lineTo(stroke, firstXPos, prevYPos);
-
-			for (let i = dir == 1 ? idx0 : idx1; i >= idx0 && i <= idx1; i += dir) {
-				let yVal1 = dataY[i];
-
-				if (yVal1 == null)
-					continue;
-
-				let x1 = pixelForX(dataX[i]);
-				let y1 = pixelForY(yVal1);
-
-				if (align == 1)
-					lineTo(stroke, x1, prevYPos);
-				else
-					lineTo(stroke, prevXPos, y1);
-
-				lineTo(stroke, x1, y1);
-
-				prevYPos = y1;
-				prevXPos = x1;
-			}
-
-			let prevXPosExt = prevXPos;
-
-			if (extend && align == 1) {
-				prevXPosExt = left + width;
-				lineTo(stroke, prevXPosExt, prevYPos);
-			}
-
-			let [ bandFillDir, bandClipDir ] = bandFillClipDirs(u, seriesIdx);
-
-			if (series.fill != null || bandFillDir != 0) {
-				let fill = _paths.fill = new Path2D(stroke);
-
-				let fillTo = series.fillTo(u, seriesIdx, series.min, series.max, bandFillDir);
-				let fillToY = pixelForY(fillTo);
-
-				lineTo(fill, prevXPosExt, fillToY);
-				lineTo(fill, firstXPosExt, fillToY);
-			}
-
-			if (!series.spanGaps) {
-			//	console.time('gaps');
-				let gaps = [];
-
-				gaps.push(...findGaps(dataX, dataY, idx0, idx1, dir, pixelForX, alignGaps));
-
-			//	console.timeEnd('gaps');
-
-			//	console.log('gaps', JSON.stringify(gaps));
-
-				// expand/contract clips for ascenders/descenders
-				let halfStroke = (series.width * pxRatio) / 2;
-				let startsOffset = (ascDesc || align ==  1) ?  halfStroke : -halfStroke;
-				let endsOffset   = (ascDesc || align == -1) ? -halfStroke :  halfStroke;
-
-				gaps.forEach(g => {
-					g[0] += startsOffset;
-					g[1] += endsOffset;
-				});
-
-				_paths.gaps = gaps = series.gaps(u, seriesIdx, idx0, idx1, gaps);
-
-				_paths.clip = clipGaps(gaps, scaleX.ori, xOff, yOff, xDim, yDim);
-			}
-
-			if (bandClipDir != 0) {
-				_paths.band = bandClipDir == 2 ? [
-					clipBandLine(u, seriesIdx, idx0, idx1, stroke, -1),
-					clipBandLine(u, seriesIdx, idx0, idx1, stroke,  1),
-				] : clipBandLine(u, seriesIdx, idx0, idx1, stroke, bandClipDir);
-			}
-
-			return _paths;
-		});
-	};
-}
-
 function findColWidth(dataX, dataY, valToPosX, scaleX, xDim, xOff, colWid = inf) {
 	if (dataX.length > 1) {
 		// prior index with non-undefined y data
@@ -2762,6 +2411,176 @@ function splineInterp(interp, opts) {
 	};
 }
 
+function _drawAcc(lineTo) {
+	return (stroke, accX, minY, maxY, inY, outY) => {
+		if (minY != maxY) {
+			if (inY != minY && outY != minY)
+				lineTo(stroke, accX, minY);
+			if (inY != maxY && outY != maxY)
+				lineTo(stroke, accX, maxY);
+
+			lineTo(stroke, accX, outY);
+		}
+	};
+}
+
+const drawAccH = _drawAcc(lineToH);
+const drawAccV = _drawAcc(lineToV);
+
+function linear(opts) {
+	const alignGaps = ifNull(opts?.alignGaps, 0);
+
+	return (u, seriesIdx, idx0, idx1) => {
+		return orient(u, seriesIdx, (series, dataX, dataY, scaleX, scaleY, valToPosX, valToPosY, xOff, yOff, xDim, yDim) => {
+			[idx0, idx1] = nonNullIdxs(dataY, idx0, idx1);
+
+			let pxRound = series.pxRound;
+
+			let pixelForX = val => pxRound(valToPosX(val, scaleX, xDim, xOff));
+			let pixelForY = val => pxRound(valToPosY(val, scaleY, yDim, yOff));
+
+			let lineTo, drawAcc;
+
+			if (scaleX.ori == 0) {
+				lineTo = lineToH;
+				drawAcc = drawAccH;
+			}
+			else {
+				lineTo = lineToV;
+				drawAcc = drawAccV;
+			}
+
+			const dir = scaleX.dir * (scaleX.ori == 0 ? 1 : -1);
+
+			const _paths = {stroke: new Path2D(), fill: null, clip: null, band: null, gaps: null, flags: BAND_CLIP_FILL};
+			const stroke = _paths.stroke;
+
+			let hasGap = false;
+
+			// decimate when number of points >= 4x available pixels
+			const decimate = idx1 - idx0 >= xDim * 4;
+
+			if (decimate) {
+				let xForPixel = pos => u.posToVal(pos, scaleX.key, true);
+
+				let minY = null,
+					maxY = null,
+					inY, outY, drawnAtX;
+
+				let accX = pixelForX(dataX[dir == 1 ? idx0 : idx1]);
+
+				let idx0px = pixelForX(dataX[idx0]);
+				let idx1px = pixelForX(dataX[idx1]);
+
+				// tracks limit of current x bucket to avoid having to get x pixel for every x value
+				let nextAccXVal = xForPixel(dir == 1 ? idx0px + 1 : idx1px - 1);
+
+				for (let i = dir == 1 ? idx0 : idx1; i >= idx0 && i <= idx1; i += dir) {
+					let xVal = dataX[i];
+					let reuseAccX = dir == 1 ? (xVal < nextAccXVal) : (xVal > nextAccXVal);
+					let x = reuseAccX ? accX :  pixelForX(xVal);
+
+					let yVal = dataY[i];
+
+					if (x == accX) {
+						if (yVal != null) {
+							outY = yVal;
+
+							if (minY == null) {
+								lineTo(stroke, x, pixelForY(outY));
+								inY = minY = maxY = outY;
+							} else {
+								if (outY < minY)
+									minY = outY;
+								else if (outY > maxY)
+									maxY = outY;
+							}
+						}
+						else {
+							if (yVal === null)
+								hasGap = true;
+						}
+					}
+					else {
+						if (minY != null)
+							drawAcc(stroke, accX, pixelForY(minY), pixelForY(maxY), pixelForY(inY), pixelForY(outY));
+
+						if (yVal != null) {
+							outY = yVal;
+							lineTo(stroke, x, pixelForY(outY));
+							minY = maxY = inY = outY;
+						}
+						else {
+							minY = maxY = null;
+
+							if (yVal === null)
+								hasGap = true;
+						}
+
+						accX = x;
+						nextAccXVal = xForPixel(accX + dir);
+					}
+				}
+
+				if (minY != null && minY != maxY && drawnAtX != accX)
+					drawAcc(stroke, accX, pixelForY(minY), pixelForY(maxY), pixelForY(inY), pixelForY(outY));
+			}
+			else {
+				for (let i = dir == 1 ? idx0 : idx1; i >= idx0 && i <= idx1; i += dir) {
+					let yVal = dataY[i];
+
+					if (yVal === null)
+						hasGap = true;
+					else if (yVal != null)
+						lineTo(stroke, pixelForX(dataX[i]), pixelForY(yVal));
+				}
+			}
+
+			let [ bandFillDir, bandClipDir ] = bandFillClipDirs(u, seriesIdx);
+
+			if (series.fill != null || bandFillDir != 0) {
+				let fill = _paths.fill = new Path2D(stroke);
+
+				let fillToVal = series.fillTo(u, seriesIdx, series.min, series.max, bandFillDir);
+				let fillToY = pixelForY(fillToVal);
+
+				let frX = pixelForX(dataX[idx0]);
+				let toX = pixelForX(dataX[idx1]);
+
+				if (dir == -1)
+					[toX, frX] = [frX, toX];
+
+				lineTo(fill, toX, fillToY);
+				lineTo(fill, frX, fillToY);
+			}
+
+			if (!series.spanGaps) { // skip in mode: 2?
+			//	console.time('gaps');
+				let gaps = [];
+
+				hasGap && gaps.push(...findGaps(dataX, dataY, idx0, idx1, dir, pixelForX, alignGaps));
+
+			//	console.timeEnd('gaps');
+
+			//	console.log('gaps', JSON.stringify(gaps));
+
+				_paths.gaps = gaps = series.gaps(u, seriesIdx, idx0, idx1, gaps);
+
+				_paths.clip = clipGaps(gaps, scaleX.ori, xOff, yOff, xDim, yDim);
+			}
+
+			if (bandClipDir != 0) {
+				_paths.band = bandClipDir == 2 ? [
+					clipBandLine(u, seriesIdx, idx0, idx1, stroke, -1),
+					clipBandLine(u, seriesIdx, idx0, idx1, stroke,  1),
+				] : clipBandLine(u, seriesIdx, idx0, idx1, stroke, bandClipDir);
+			}
+
+			return _paths;
+		});
+	};
+}
+
 function monotoneCubic(opts) {
 	return splineInterp(_monotoneCubic, opts);
 }
@@ -2827,6 +2646,187 @@ function _monotoneCubic(xs, ys, moveTo, lineTo, bezierCurveTo, pxRound) {
 	}
 
 	return path;
+}
+
+// TODO: drawWrap(seriesIdx, drawPoints) (save, restore, translate, clip)
+function points(opts) {
+	return (u, seriesIdx, idx0, idx1, filtIdxs) => {
+	//	log("drawPoints()", arguments);
+		let { pxRatio } = u;
+
+		return orient(u, seriesIdx, (series, dataX, dataY, scaleX, scaleY, valToPosX, valToPosY, xOff, yOff, xDim, yDim) => {
+			let { pxRound, points } = series;
+
+			let moveTo, arc;
+
+			if (scaleX.ori == 0) {
+				moveTo = moveToH;
+				arc = arcH;
+			}
+			else {
+				moveTo = moveToV;
+				arc = arcV;
+			}
+
+			const width = roundDec(points.width * pxRatio, 3);
+
+			let rad = (points.size - points.width) / 2 * pxRatio;
+			let dia = roundDec(rad * 2, 3);
+
+			let fill = new Path2D();
+			let clip = new Path2D();
+
+			let { left: lft, top: top, width: wid, height: hgt } = u.bbox;
+
+			rectH(clip,
+				lft - dia,
+				top - dia,
+				wid + dia * 2,
+				hgt + dia * 2,
+			);
+
+			const drawPoint = pi => {
+				if (dataY[pi] != null) {
+					let x = pxRound(valToPosX(dataX[pi], scaleX, xDim, xOff));
+					let y = pxRound(valToPosY(dataY[pi], scaleY, yDim, yOff));
+
+					moveTo(fill, x + rad, y);
+					arc(fill, x, y, rad, 0, PI * 2);
+				}
+			};
+
+			if (filtIdxs)
+				filtIdxs.forEach(drawPoint);
+			else {
+				for (let pi = idx0; pi <= idx1; pi++)
+					drawPoint(pi);
+			}
+
+			return {
+				stroke: width > 0 ? fill : null,
+				fill,
+				clip,
+				flags: BAND_CLIP_FILL | BAND_CLIP_STROKE,
+			};
+		});
+	};
+}
+
+// BUG: align: -1 behaves like align: 1 when scale.dir: -1
+function stepped(opts) {
+	const align = ifNull(opts.align, 1);
+	// whether to draw ascenders/descenders at null/gap bondaries
+	const ascDesc = ifNull(opts.ascDesc, false);
+	const alignGaps = ifNull(opts.alignGaps, 0);
+	const extend = ifNull(opts.extend, false);
+
+	return (u, seriesIdx, idx0, idx1) => {
+		let { pxRatio } = u;
+
+		return orient(u, seriesIdx, (series, dataX, dataY, scaleX, scaleY, valToPosX, valToPosY, xOff, yOff, xDim, yDim) => {
+			[idx0, idx1] = nonNullIdxs(dataY, idx0, idx1);
+
+			let pxRound = series.pxRound;
+
+			let { left, width } = u.bbox;
+
+			let pixelForX = val => pxRound(valToPosX(val, scaleX, xDim, xOff));
+			let pixelForY = val => pxRound(valToPosY(val, scaleY, yDim, yOff));
+
+			let lineTo = scaleX.ori == 0 ? lineToH : lineToV;
+
+			const _paths = {stroke: new Path2D(), fill: null, clip: null, band: null, gaps: null, flags: BAND_CLIP_FILL};
+			const stroke = _paths.stroke;
+
+			const dir = scaleX.dir * (scaleX.ori == 0 ? 1 : -1);
+
+			let prevYPos  = pixelForY(dataY[dir == 1 ? idx0 : idx1]);
+			let firstXPos = pixelForX(dataX[dir == 1 ? idx0 : idx1]);
+			let prevXPos = firstXPos;
+
+			let firstXPosExt = firstXPos;
+
+			if (extend && align == -1) {
+				firstXPosExt = left;
+				lineTo(stroke, firstXPosExt, prevYPos);
+			}
+
+			lineTo(stroke, firstXPos, prevYPos);
+
+			for (let i = dir == 1 ? idx0 : idx1; i >= idx0 && i <= idx1; i += dir) {
+				let yVal1 = dataY[i];
+
+				if (yVal1 == null)
+					continue;
+
+				let x1 = pixelForX(dataX[i]);
+				let y1 = pixelForY(yVal1);
+
+				if (align == 1)
+					lineTo(stroke, x1, prevYPos);
+				else
+					lineTo(stroke, prevXPos, y1);
+
+				lineTo(stroke, x1, y1);
+
+				prevYPos = y1;
+				prevXPos = x1;
+			}
+
+			let prevXPosExt = prevXPos;
+
+			if (extend && align == 1) {
+				prevXPosExt = left + width;
+				lineTo(stroke, prevXPosExt, prevYPos);
+			}
+
+			let [ bandFillDir, bandClipDir ] = bandFillClipDirs(u, seriesIdx);
+
+			if (series.fill != null || bandFillDir != 0) {
+				let fill = _paths.fill = new Path2D(stroke);
+
+				let fillTo = series.fillTo(u, seriesIdx, series.min, series.max, bandFillDir);
+				let fillToY = pixelForY(fillTo);
+
+				lineTo(fill, prevXPosExt, fillToY);
+				lineTo(fill, firstXPosExt, fillToY);
+			}
+
+			if (!series.spanGaps) {
+			//	console.time('gaps');
+				let gaps = [];
+
+				gaps.push(...findGaps(dataX, dataY, idx0, idx1, dir, pixelForX, alignGaps));
+
+			//	console.timeEnd('gaps');
+
+			//	console.log('gaps', JSON.stringify(gaps));
+
+				// expand/contract clips for ascenders/descenders
+				let halfStroke = (series.width * pxRatio) / 2;
+				let startsOffset = (ascDesc || align ==  1) ?  halfStroke : -halfStroke;
+				let endsOffset   = (ascDesc || align == -1) ? -halfStroke :  halfStroke;
+
+				gaps.forEach(g => {
+					g[0] += startsOffset;
+					g[1] += endsOffset;
+				});
+
+				_paths.gaps = gaps = series.gaps(u, seriesIdx, idx0, idx1, gaps);
+
+				_paths.clip = clipGaps(gaps, scaleX.ori, xOff, yOff, xDim, yDim);
+			}
+
+			if (bandClipDir != 0) {
+				_paths.band = bandClipDir == 2 ? [
+					clipBandLine(u, seriesIdx, idx0, idx1, stroke, -1),
+					clipBandLine(u, seriesIdx, idx0, idx1, stroke,  1),
+				] : clipBandLine(u, seriesIdx, idx0, idx1, stroke, bandClipDir);
+			}
+
+			return _paths;
+		});
+	};
 }
 
 const cursorPlots = new Set();
@@ -5974,6 +5974,7 @@ function uPlot(opts, data, then) {
 	}
 
 	function dblClick(e, src, _l, _t, _w, _h, _i) {
+		console.log("DOUBLE CLICK");
 		if (cursor._lock)
 			return;
 
