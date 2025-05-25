@@ -1,132 +1,122 @@
 import {
-	FEAT_TIME,
+	FEAT_JOIN,
 	FEAT_LEGEND,
-
-	FEAT_POINTS,
-
 	FEAT_PATHS,
+	FEAT_PATHS_BARS,
 	FEAT_PATHS_LINEAR,
 	FEAT_PATHS_SPLINE,
 	FEAT_PATHS_SPLINE2,
 	FEAT_PATHS_STEPPED,
-	FEAT_PATHS_BARS,
-
-	FEAT_JOIN,
+	FEAT_POINTS,
+	FEAT_TIME,
 } from './feats';
 
 import {
-	copy,
-	assign,
-	PI,
-	inf,
 	abs,
-	floor,
-	round,
-	roundDec,
-	ceil,
-	min,
-	max,
-	clamp,
-	pow,
 	asinh,
-	sinh,
-	log10,
+	assign,
+	autoRangePart,
+	ceil,
+	clamp,
 	closestIdx,
-	getMinMax,
-	rangeNum,
-	rangeLog,
-	rangeAsinh,
-	incrRound,
-	incrRoundUp,
-	isArr,
-	isObj,
+	copy,
+	EMPTY_ARR,
+	EMPTY_OBJ,
 	fastIsObj,
-	isStr,
-	fnOrSelf,
-	fmtNum,
 	fixedDec,
+	fmtNum,
+	fnOrSelf,
+	getMinMax,
+	guessDec,
+	hasData,
 	ifNull,
+	incrRound,
+	inf,
+	isArr,
+	isFn,
+	isObj,
+	isStr,
+	isUndef,
 	join,
+	log10,
+	max,
 	microTask,
-	retArg0,
+	min,
+	nullNullTuple,
+	numIntDigits,
+	PI,
+	pow,
+	rangeAsinh,
+	rangeLog,
+	rangeNum,
+	rangePad,
 	retArg1,
+	retEq,
 	retNull,
 	retTrue,
-	EMPTY_OBJ,
-	EMPTY_ARR,
-	nullNullTuple,
-	retEq,
-	autoRangePart,
-	rangePad,
-	hasData,
-	numIntDigits,
-	isUndef,
-	guessDec,
-	cmpObj,
-	isFn,
+	round,
+	roundDec,
+	sinh
 } from './utils';
 
 import {
-	WIDTH,
-	HEIGHT,
-	TOP,
 	BOTTOM,
-	LEFT,
-	RIGHT,
-	transparent,
-
-	mousemove,
-	mousedown,
-	mouseup,
-	mouseleave,
-	mouseenter,
 	dblclick,
-	resize,
-	scroll,
-
 	dppxchange,
-	LEGEND_DISP
+	HEIGHT,
+	LEFT,
+	LEGEND_DISP,
+	mousedown,
+	mouseenter,
+	mouseleave,
+	mousemove,
+	mouseup,
+	resize,
+	RIGHT,
+	scroll,
+	TOP,
+	transparent,
+	WIDTH
 } from './strings';
 
 import {
-	UPLOT,
-	ORI_HZ,
-	ORI_VT,
-	TITLE,
-	WRAP,
-	UNDER,
-	OVER,
 	AXIS,
-	OFF,
-	SELECT,
+	CURSOR_PT,
 	CURSOR_X,
 	CURSOR_Y,
-	CURSOR_PT,
 	LEGEND,
-	LEGEND_LIVE,
 	LEGEND_INLINE,
-	LEGEND_SERIES,
-	LEGEND_MARKER,
 	LEGEND_LABEL,
+	LEGEND_LIVE,
+	LEGEND_MARKER,
+	LEGEND_SERIES,
 	LEGEND_VALUE,
+	OFF,
+	ORI_HZ,
+	ORI_VT,
+	OVER,
+	SELECT,
+	TITLE,
+	UNDER,
+	UPLOT,
+	WRAP,
 } from './domClasses';
 
 import {
-	domEnv,
-	doc,
-	win,
-	pxRatio as pxRatioGlobal,
-
 	addClass,
-	remClass,
-	setStylePx,
-	placeTag,
-	placeDiv,
-	elTrans,
+	doc,
+	domEnv,
 	elColor,
 	elSize,
-	on,
+	elTrans,
 	off,
+	on,
+	placeDiv,
+	placeTag,
+	pxRatio as pxRatioGlobal,
+	remClass,
+	setStylePx,
+	win,
 } from './dom';
 
 import {
@@ -135,66 +125,52 @@ import {
 } from './fmtDate';
 
 import {
-	ptDia,
-	cursorOpts,
-
-	xAxisOpts,
-	yAxisOpts,
-	xSeriesOpts,
-	ySeriesOpts,
-	xScaleOpts,
-	yScaleOpts,
-
-	xySeriesOpts,
-
-	clampScale,
-
-	timeIncrsMs,
-	timeIncrsS,
-
-	wholeIncrs,
-	numIncrs,
-	timeAxisVal,
-	timeAxisVals,
-	numAxisVals,
-
-	log2AxisValsFilt,
-	log10AxisValsFilt,
-
-	timeSeriesVal,
-	numSeriesVal,
-
-	timeSeriesLabel,
-	numSeriesLabel,
-
-	timeAxisSplitsMs,
-	timeAxisSplitsS,
-
-	numAxisSplits,
-	logAxisSplits,
-	asinhAxisSplits,
-
-	timeAxisStamps,
-
 	_timeAxisStampsMs,
 	_timeAxisStampsS,
-
-	timeSeriesStamp,
 	_timeSeriesStamp,
-
+	asinhAxisSplits,
+	clampScale,
+	cursorOpts,
 	legendOpts,
+	log10AxisValsFilt,
+	log2AxisValsFilt,
+	logAxisSplits,
+	numAxisSplits,
+	numAxisVals,
+	numIncrs,
+	numSeriesLabel,
+	numSeriesVal,
+	ptDia,
+	timeAxisSplitsMs,
+	timeAxisSplitsS,
+	timeAxisStamps,
+	timeAxisVal,
+	timeAxisVals,
+	timeIncrsMs,
+	timeIncrsS,
+	timeSeriesLabel,
+	timeSeriesStamp,
+	timeSeriesVal,
+	wholeIncrs,
+	xAxisOpts,
+	xScaleOpts,
+	xSeriesOpts,
+	xySeriesOpts,
+	yAxisOpts,
+	yScaleOpts,
+	ySeriesOpts,
 } from './opts';
 
 import { _sync } from './sync';
 
-import { points   } from './paths/points';
-import { linear   } from './paths/linear';
-import { stepped  } from './paths/stepped';
-import { bars     } from './paths/bars';
-import { monotoneCubic     as spline  } from './paths/monotoneCubic';
+import { bars } from './paths/bars';
 import { catmullRomCentrip as spline2 } from './paths/catmullRomCentrip';
+import { linear } from './paths/linear';
+import { monotoneCubic as spline } from './paths/monotoneCubic';
+import { points } from './paths/points';
+import { stepped } from './paths/stepped';
 
-import { addGap, clipGaps, moveToH, moveToV, arcH, arcV, orient, pxRoundGen, seriesFillTo, BAND_CLIP_FILL, BAND_CLIP_STROKE } from './paths/utils';
+import { addGap, arcH, arcV, BAND_CLIP_FILL, BAND_CLIP_STROKE, clipGaps, moveToH, moveToV, orient, pxRoundGen, seriesFillTo } from './paths/utils';
 
 function log(name, args) {
 	console.log.apply(console, [name].concat(Array.prototype.slice.call(args)));
@@ -3349,6 +3325,7 @@ export default function uPlot(opts, data, then) {
 	}
 
 	function dblClick(e, src, _l, _t, _w, _h, _i) {
+		console.log("DOUBLE CLICK")
 		if (cursor._lock)
 			return;
 
